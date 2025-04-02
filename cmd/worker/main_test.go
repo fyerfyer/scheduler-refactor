@@ -36,7 +36,7 @@ func TestInitConfig(t *testing.T) {
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	require.NoError(t, err, "Failed to create test config file")
 
-	err = config.InitConfig(configPath)
+	err = config.InitConfig(configPath, false)
 	require.NoError(t, err, "Failed to initialize config")
 
 	assert.Equal(t, []string{"localhost:2379"}, config.GlobalConfig.EtcdEndpoints)

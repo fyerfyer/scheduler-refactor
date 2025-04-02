@@ -1,0 +1,7 @@
+{
+  "etcdEndpoints": ["localhost:2379"],
+  "etcdDialTimeout": 5000,
+  "apiPort": 8070,
+  "mongoUri": "mongodb://localhost:27017",
+  "mongoConnectTimeout": 5000
+}

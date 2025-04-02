@@ -226,3 +226,7 @@ func (c *Client) FindJobLogsSince(jobName string, timestamp int64) ([]*common.Jo
 
 	return logs, nil
 }
+
+func (c *Client) GetCollection(collectionName string) (*mongo.Collection, error) {
+	return c.database.Collection(collectionName), nil
+}
