@@ -3,7 +3,7 @@ module github.com/fyerfyer/scheduler-refactor
 go 1.23.5
 
 require (
-	github.com/coreos/etcd v3.3.27+incompatible
+	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/stretchr/testify v1.9.0
 	go.etcd.io/etcd/client/v3 v3.5.21
 	go.mongodb.org/mongo-driver v1.17.3
