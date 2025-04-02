@@ -44,7 +44,7 @@ func main() {
 	flag.Parse()
 
 	// 加载配置
-	if err = config.InitConfig(configFile); err != nil {
+	if err = config.InitConfig(configFile, false); err != nil {
 		panic(err)
 	}
 

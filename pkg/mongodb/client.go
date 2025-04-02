@@ -192,3 +192,37 @@ func (c *Client) DropCollection() error {
 
 	return nil
 }
+
+// FindJobLogsSince 查询指定时间之后的任务日志
+func (c *Client) FindJobLogsSince(jobName string, timestamp int64) ([]*common.JobLog, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// 创建查询过滤器
+	filter := bson.M{
+		"startTime": bson.M{"$gte": timestamp},
+	}
+
+	if jobName != "" {
+		filter["jobName"] = jobName
+	}
+
+	// 设置查询选项
+	opts := options.Find().
+		SetSort(bson.D{{Key: "startTime", Value: -1}}) // 按开始时间降序排序
+
+	// 执行查询
+	cursor, err := c.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, common.NewMongoError("find_job_logs_since", common.LogCollectionName, err)
+	}
+	defer cursor.Close(ctx)
+
+	// 解析结果
+	var logs []*common.JobLog
+	if err = cursor.All(ctx, &logs); err != nil {
+		return nil, common.NewMongoError("cursor_all", common.LogCollectionName, err)
+	}
+
+	return logs, nil
+}

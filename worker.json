@@ -1,0 +1,12 @@
+{
+  "etcdEndpoints": ["localhost:2379"],
+  "etcdDialTimeout": 5000,
+  "workerId": "worker1",
+  "heartbeatInterval": 3000,
+  "logBatchSize": 50,
+  "logCommitTimeout": 2000,
+  "executorThreads": 5,
+  "jobLockTtl": 10,
+  "mongoUri": "mongodb://localhost:27017",
+  "mongoConnectTimeout": 3000
+}

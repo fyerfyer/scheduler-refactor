@@ -31,7 +31,7 @@ type Config struct {
 var GlobalConfig *Config
 
 // InitConfig 初始化配置
-func InitConfig(configFile string) error {
+func InitConfig(configFile string, parseFlags bool) error {
 	// 创建默认配置
 	GlobalConfig = &Config{
 		EtcdEndpoints:       []string{"localhost:2379"},
@@ -58,7 +58,9 @@ func InitConfig(configFile string) error {
 	loadFromEnv()
 
 	// 最后从命令行参数加载，命令行参数优先级最高
-	loadFromFlags()
+	if parseFlags {
+		loadFromFlags()
+	}
 
 	// 生成默认的WorkerID（如果未指定）
 	if GlobalConfig.WorkerID == "" {

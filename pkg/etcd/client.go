@@ -194,3 +194,16 @@ func (c *Client) ReleaseLock(lockKey string, leaseID clientv3.LeaseID) error {
 
 	return nil
 }
+
+// DeleteWithPrefix 删除前缀匹配的所有键值
+func (c *Client) DeleteWithPrefix(prefix string) (*clientv3.DeleteResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := c.kv.Delete(ctx, prefix, clientv3.WithPrefix())
+	if err != nil {
+		return nil, common.NewEtcdError("deleteWithPrefix", prefix, err)
+	}
+
+	return resp, nil
+}
