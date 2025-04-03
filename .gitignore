@@ -26,3 +26,39 @@ go.work.sum
 
 *.vscode
 *.idea
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+dist/
+build/
+
+.env.local
+.env.*.local
+
+
+# temp file
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# cache file
+.cache/
+output/
+temp/
+
+# test
+coverage/
+*.lcov
+
+# TypeScript
+*.tsbuildinfo
+
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
