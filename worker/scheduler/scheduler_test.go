@@ -2,10 +2,11 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/gorhill/cronexpr"
+	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -49,11 +50,12 @@ func TestParseCronExpr(t *testing.T) {
 	validExpr := "*/5 * * * * *"
 	invalidExpr := "invalid cron"
 
-	validResult, err := cronexpr.Parse(validExpr)
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	validResult, err := parser.Parse(validExpr)
 	assert.NoError(t, err, "Should parse valid cron expression")
 	assert.NotNil(t, validResult, "Valid cron expression should return non-nil result")
 
-	_, err = cronexpr.Parse(invalidExpr)
+	_, err = parser.Parse(invalidExpr)
 	assert.Error(t, err, "Should fail to parse invalid cron expression")
 }
 
@@ -115,7 +117,8 @@ func TestTrySchedule(t *testing.T) {
 	// 创建一个过去时间的计划任务
 	pastTime := time.Now().Add(-1 * time.Minute)
 	job := createTestJob("testjob", "echo test", "*/1 * * * * *", false)
-	expr, _ := cronexpr.Parse(job.CronExpr)
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	expr, _ := parser.Parse(job.CronExpr)
 
 	plan := &JobSchedulePlan{
 		Job:      job,
@@ -190,6 +193,52 @@ func TestKillJob(t *testing.T) {
 	// 测试Kill
 	err = scheduler.KillJob("testjob")
 	assert.NoError(t, err, "Should not return error when killing existing job")
+}
+
+func TestSchedulerCycling(t *testing.T) {
+	scheduler := setupTestScheduler(t)
+	defer scheduler.Stop()
+	cronExpr := "* * * * * *"
+
+	job := createTestJob("cycle_test_job", "echo test", cronExpr, false)
+	fmt.Printf("Job created: %+v\n", job)
+
+	saveEvent := &common.JobEvent{
+		EventType: common.JobEventSave,
+		Job:       job,
+	}
+
+	scheduler.handleJobEvent(saveEvent)
+
+	schedPlan, exists := scheduler.jobPlans["cycle_test_job"]
+	assert.True(t, exists, "Job should be added to job plans")
+
+	if exists {
+		t.Logf("First execution scheduled for: %v", schedPlan.NextTime.Format("2006-01-02 15:04:05"))
+		fmt.Printf("Job plan created: next execution at %v (expr: %s)\n",
+			schedPlan.NextTime.Format("2006-01-02 15:04:05"),
+			schedPlan.Job.CronExpr)
+	}
+
+	scheduler.Start()
+
+	fmt.Println("Scheduler started, waiting for first execution...")
+
+	initialExecutions := scheduler.GetExecutionCount()
+
+	t.Logf("Waiting for first job execution...")
+	time.Sleep(7 * time.Second)
+
+	fmt.Println("Checking for executions after first wait period...")
+	firstCheckCount := scheduler.GetExecutionCount()
+	assert.Greater(t, firstCheckCount, initialExecutions, "Job should execute at least once")
+
+	t.Logf("Waiting for second job execution...")
+	time.Sleep(7 * time.Second)
+
+	fmt.Println("Checking for executions after second wait period...")
+	secondCheckCount := scheduler.GetExecutionCount()
+	assert.Greater(t, secondCheckCount, firstCheckCount, "Job should execute a second time")
 }
 
 func setupTestEtcd() (*etcd.Client, error) {

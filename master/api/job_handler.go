@@ -3,7 +3,7 @@ package api
 import (
 	"errors"
 	"github.com/gin-gonic/gin"
-	"github.com/gorhill/cronexpr"
+	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 
 	"github.com/fyerfyer/scheduler-refactor/common"
@@ -36,7 +36,8 @@ func (s *Server) saveJob(c *gin.Context) {
 	}
 
 	// 验证cron表达式
-	if _, err := cronexpr.Parse(job.CronExpr); err != nil {
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	if _, err := parser.Parse(job.CronExpr); err != nil {
 		failure(c, common.ApiParamError, "invalid cron expression: "+err.Error())
 		return
 	}

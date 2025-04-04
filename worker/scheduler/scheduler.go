@@ -2,9 +2,10 @@ package scheduler
 
 import (
 	"context"
+	"sync"
 	"time"
 
-	"github.com/gorhill/cronexpr"
+	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 
 	"github.com/fyerfyer/scheduler-refactor/common"
@@ -16,24 +17,26 @@ import (
 
 // JobSchedulePlan 任务调度计划
 type JobSchedulePlan struct {
-	Job      *common.Job          // 任务信息
-	Expr     *cronexpr.Expression // cron表达式
-	NextTime time.Time            // 下次调度时间
+	Job      *common.Job   // 任务信息
+	Expr     cron.Schedule // cron表达式
+	NextTime time.Time     // 下次调度时间
 }
 
 // Scheduler 任务调度器
 type Scheduler struct {
-	logger        *zap.Logger                       // 日志对象
-	jobManager    *jobmgr.JobManager                // 任务管理器
-	etcdClient    *etcd.Client                      // etcd客户端
-	jobPlans      map[string]*JobSchedulePlan       // 任务调度计划表
-	jobExecuting  map[string]*common.JobExecuteInfo // 正在执行的任务
-	jobResultChan <-chan *common.JobExecuteResult   // 任务执行结果通道
-	jobEventChan  <-chan *common.JobEvent           // 任务事件通道
-	executor      *executor.Executor                // 任务执行器
-	planChan      chan *JobSchedulePlan             // 新调度任务通道
-	ctx           context.Context                   // 上下文，用于控制退出
-	cancelFunc    context.CancelFunc                // 取消函数
+	logger         *zap.Logger                       // 日志对象
+	jobManager     *jobmgr.JobManager                // 任务管理器
+	etcdClient     *etcd.Client                      // etcd客户端
+	jobPlans       map[string]*JobSchedulePlan       // 任务调度计划表
+	jobExecuting   map[string]*common.JobExecuteInfo // 正在执行的任务
+	jobResultChan  <-chan *common.JobExecuteResult   // 任务执行结果通道
+	jobEventChan   <-chan *common.JobEvent           // 任务事件通道
+	executor       *executor.Executor                // 任务执行器
+	planChan       chan *JobSchedulePlan             // 新调度任务通道
+	ctx            context.Context                   // 上下文，用于控制退出
+	cancelFunc     context.CancelFunc                // 取消函数
+	executionCount int
+	countLock      sync.Mutex
 }
 
 // NewScheduler 创建调度器
@@ -46,17 +49,19 @@ func NewScheduler(
 	ctx, cancel := context.WithCancel(context.Background())
 
 	scheduler := &Scheduler{
-		logger:        logger,
-		jobManager:    jobManager,
-		etcdClient:    etcdClient,
-		jobPlans:      make(map[string]*JobSchedulePlan),
-		jobExecuting:  make(map[string]*common.JobExecuteInfo),
-		jobResultChan: exec.GetResultChan(),
-		jobEventChan:  jobManager.GetEventChan(),
-		executor:      exec,
-		planChan:      make(chan *JobSchedulePlan, 100),
-		ctx:           ctx,
-		cancelFunc:    cancel,
+		logger:         logger,
+		jobManager:     jobManager,
+		etcdClient:     etcdClient,
+		jobPlans:       make(map[string]*JobSchedulePlan),
+		jobExecuting:   make(map[string]*common.JobExecuteInfo),
+		jobResultChan:  exec.GetResultChan(),
+		jobEventChan:   jobManager.GetEventChan(),
+		executor:       exec,
+		planChan:       make(chan *JobSchedulePlan, 100),
+		ctx:            ctx,
+		cancelFunc:     cancel,
+		executionCount: 0,
+		countLock:      sync.Mutex{},
 	}
 
 	return scheduler
@@ -89,7 +94,8 @@ func (s *Scheduler) loadJobs() {
 		}
 
 		// 解析cron表达式
-		expr, err := cronexpr.Parse(job.CronExpr)
+		parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+		expr, err := parser.Parse(job.CronExpr)
 		if err != nil {
 			s.logger.Error("failed to parse cron expression",
 				zap.String("jobName", job.Name),
@@ -132,7 +138,8 @@ func (s *Scheduler) handleJobEvent(event *common.JobEvent) {
 		}
 
 		// 解析cron表达式
-		expr, err := cronexpr.Parse(job.CronExpr)
+		parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+		expr, err := parser.Parse(job.CronExpr)
 		if err != nil {
 			s.logger.Error("failed to parse cron expression",
 				zap.String("jobName", job.Name),
@@ -167,6 +174,9 @@ func (s *Scheduler) handleJobEvent(event *common.JobEvent) {
 // handleJobResult 处理任务执行结果
 func (s *Scheduler) handleJobResult(result *common.JobExecuteResult) {
 	// 从执行任务表中删除
+	s.countLock.Lock()
+	s.executionCount++
+	s.countLock.Unlock()
 	delete(s.jobExecuting, result.JobName)
 
 	s.logger.Info("job execution finished",
@@ -198,8 +208,31 @@ func (s *Scheduler) scheduleLoop() {
 	}
 }
 
+// Debug 函数
+//func (s *Scheduler) debugScheduler() {
+//	fmt.Println("\n--- SCHEDULER DEBUG INFO ---")
+//	fmt.Printf("Number of job plans: %d\n", len(s.jobPlans))
+//
+//	now := time.Now()
+//	fmt.Printf("Current time: %v\n", now.Format("2006-01-02 15:04:05"))
+//
+//	for name, plan := range s.jobPlans {
+//		fmt.Printf("Job: %s, CronExpr: %s, NextTime: %v, TimeDiff: %v\n",
+//			name,
+//			plan.Job.CronExpr,
+//			plan.NextTime.Format("2006-01-02 15:04:05"),
+//			plan.NextTime.Sub(now))
+//	}
+//	fmt.Println("--- END SCHEDULER DEBUG ---")
+//}
+
 // trySchedule 尝试执行调度
 func (s *Scheduler) trySchedule() {
+	// Debug 信息
+	//if testing.Testing() {
+	//	s.debugScheduler()
+	//}
+
 	// 当前时间
 	now := time.Now()
 
@@ -286,4 +319,11 @@ func (s *Scheduler) KillJob(jobName string) error {
 	}
 
 	return common.NewJobError(jobName, common.ErrJobNotFound)
+}
+
+// GetExecutionCount 获取任务执行计数
+func (s *Scheduler) GetExecutionCount() int {
+	s.countLock.Lock()
+	defer s.countLock.Unlock()
+	return s.executionCount
 }
